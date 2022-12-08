@@ -1,5 +1,6 @@
 from collections.abc import Callable
 import logging
+import time
 
 from gym.spaces import Discrete
 import numpy as np
@@ -19,6 +20,14 @@ def make_tuple(val):
     else:
         return (val,)
 
+
+
+def sleep_for_time(tm):
+
+    def wait():
+        time.sleep(tm)
+
+    return wait
 
 def uct_action_selection(*, exploration_constant, lower_bound_reward, upper_bound_reward):
 
@@ -157,3 +166,21 @@ def standard_best_action_selection(node, action_space):
     logger.info("Action counts: %s", action_counts)
     action = action_space.start + np.argmax(action_counts)
     return action
+
+
+def standard_prune_tree_function(root, succ_state):
+    new_root = None
+    succ_state = make_tuple(succ_state)
+    for (_, child_state), child in root.children.items():
+        if child_state == succ_state:
+            new_root = child
+            break
+    if new_root is None:
+        logger.info("unable to find matching child, resetting tree!")
+        new_root = MCTSNode(succ_state, False)
+        new_root.count_visited = 1
+    else:
+        logger.info("pruning tree to: %s", succ_state)
+        new_root = root
+
+    return new_root

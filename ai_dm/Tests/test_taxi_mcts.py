@@ -9,6 +9,10 @@ from ai_dm.Search.mcts import mcts_factory
 logger = logging.getLogger(__name__)
 
 
+def set_taxi_env_to_state(env, state):
+    env.unwrapped.s = state
+
+
 def main_taxi_mcts():
 
     # define the environment
@@ -21,13 +25,12 @@ def main_taxi_mcts():
     print("initial state:", init_state)
     print(env.render())
 
-    budget = 500
+    budget = 2
     max_depth = 100
     exploration_constant = 0.5
     lower_bound_reward = -10 * max_depth
     upper_bound_reward = 20
 
-    update_budget = lambda x: x-1
     select_and_expand = mp.standard_tree_policy(
         mp.uct_action_selection(
                 exploration_constant=exploration_constant,
@@ -37,21 +40,46 @@ def main_taxi_mcts():
     rollout = mp.standard_default_policy(max_depth=max_depth)
     backprop = mp.standard_backprop
     best_action = mp.standard_best_action_selection
+    set_env_to_state = set_taxi_env_to_state
+    prune_tree = mp.standard_prune_tree_function
 
     # perform MCTS
     mcts = mcts_factory(
-        budget,
-        update_budget,
+        set_env_to_state,
         select_and_expand,
         rollout,
         backprop,
-        best_action
+        best_action,
+        prune_tree=prune_tree
     )()
 
     state = init_state
     terminated = False
+    max_iterations = 100
+    max_iterations = None
+
+    type_of_budget_comp = "time" # one of (iterations, time, fork, fork_once)
+    # type_of_budget_comp = "fork_once"
     while not terminated:
-        action = mcts.get_action(state, env)
+        if type_of_budget_comp == "time":
+            action = mcts.get_action_time(
+                state, env, budget, max_iterations=max_iterations)
+        elif type_of_budget_comp == "iterations":
+            action = mcts.get_action_iterations(
+                state, env, max_iterations=max_iterations)
+        elif type_of_budget_comp == "fork":
+            action = mcts.get_action_fork(
+                state, env, mp.sleep_for_time(budget),
+                max_iterations=max_iterations)
+        elif type_of_budget_comp == "fork_once":
+            action = mcts.get_action_fork_once(
+                state, env, mp.sleep_for_time(budget),
+                max_iterations=max_iterations)
+        else:
+            raise RuntimeError(
+                "invalid budget computation type has to be one of "
+                "(\"iterations\", \"time\", \"fork\", \"fork_once\")")
+
         logger.info("Applying action: %s", action)
         if action is None:
             env.render()
